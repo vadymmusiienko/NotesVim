@@ -1,5 +1,4 @@
 import AppKit
-import ServiceManagement
 import VimEngine
 
 /// Menu bar badge showing the current mode (N, I, V, VL) plus a small settings menu.
@@ -8,6 +7,7 @@ import VimEngine
 final class StatusItemController: NSObject, NSMenuDelegate {
     private let controller: NotesVimController
     private let settings: Settings
+    private let lifecycle: Lifecycle
     private let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private var imageCache: [String: NSImage] = [:]
 
@@ -15,11 +15,12 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private let permissionItem = NSMenuItem(title: "Grant Accessibility Access…", action: #selector(grantAccess), keyEquivalent: "")
     private let enabledItem = NSMenuItem(title: "Enable Vim Keys in Notes", action: #selector(toggleEnabled), keyEquivalent: "")
     private let screenLinesItem = NSMenuItem(title: "j and k Move by Visual Lines", action: #selector(toggleScreenLines), keyEquivalent: "")
-    private let loginItem = NSMenuItem(title: "Open at Login", action: #selector(toggleLogin), keyEquivalent: "")
+    private let startWithNotesItem = NSMenuItem(title: "Start with Notes", action: #selector(toggleStartWithNotes), keyEquivalent: "")
 
-    init(controller: NotesVimController, settings: Settings) {
+    init(controller: NotesVimController, settings: Settings, lifecycle: Lifecycle) {
         self.controller = controller
         self.settings = settings
+        self.lifecycle = lifecycle
         super.init()
         // Keeps its place in the menu bar each time it comes back.
         item.autosaveName = "NotesVim"
@@ -64,14 +65,14 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         let menu = NSMenu()
         menu.delegate = self
         statusLine.isEnabled = false
-        for menuItem in [permissionItem, enabledItem, screenLinesItem, loginItem] { menuItem.target = self }
+        for menuItem in [permissionItem, enabledItem, screenLinesItem, startWithNotesItem] { menuItem.target = self }
         menu.addItem(statusLine)
         menu.addItem(permissionItem)
         menu.addItem(.separator())
         menu.addItem(enabledItem)
         menu.addItem(screenLinesItem)
         menu.addItem(.separator())
-        menu.addItem(loginItem)
+        menu.addItem(startWithNotesItem)
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "Quit NotesVim", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
         return menu
@@ -82,7 +83,9 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         permissionItem.isHidden = controller.hasPermission
         enabledItem.state = settings.isEnabled ? .on : .off
         screenLinesItem.state = settings.verticalMovesUseScreenLines ? .on : .off
-        loginItem.state = SMAppService.mainApp.status == .enabled ? .on : .off
+        startWithNotesItem.state = lifecycle.startsWithNotes ? .on : .off
+        startWithNotesItem.title = lifecycle.startsWithNotes && lifecycle.launcherNeedsApproval
+            ? "Start with Notes (Allow in Login Items…)" : "Start with Notes"
     }
 
     @objc private func grantAccess() { controller.openAccessibilitySettings() }
@@ -91,17 +94,11 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
     @objc private func toggleScreenLines() { settings.verticalMovesUseScreenLines.toggle() }
 
-    @objc private func toggleLogin() {
-        do {
-            if SMAppService.mainApp.status == .enabled {
-                try SMAppService.mainApp.unregister()
-            } else {
-                try SMAppService.mainApp.register()
-            }
-        } catch {
-            let alert = NSAlert(error: error)
-            alert.messageText = "Could not change the login item"
-            alert.runModal()
+    @objc private func toggleStartWithNotes() {
+        if lifecycle.startsWithNotes, lifecycle.launcherNeedsApproval {
+            lifecycle.openLoginItemsSettings()
+        } else {
+            lifecycle.startsWithNotes.toggle()
         }
     }
 

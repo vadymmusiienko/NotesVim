@@ -5,7 +5,7 @@ import ApplicationServices
 /// changes, so the block cursor can be restored after mouse clicks, undo, or Find.
 @MainActor
 final class NotesApplication {
-    static let bundleIdentifier = "com.apple.Notes"
+    nonisolated static let bundleIdentifier = "com.apple.Notes"
 
     let processIdentifier: pid_t
     private let application: AXUIElement

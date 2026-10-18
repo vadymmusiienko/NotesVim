@@ -14,6 +14,12 @@ it in **System Settings → Privacy & Security → Accessibility**. The menu bar
 mode: **N** (Normal), **I** (Insert, outlined), **V** / **VL** (Visual). It is only in the menu bar
 while Notes is the active app (and everywhere until the permission is granted).
 
+NotesVim runs exactly while Notes runs: it starts when Notes starts and quits when Notes quits.
+macOS cannot start one app along with another, so a tiny login item inside the app, **NotesVim
+Launcher** (about 3 MB of memory, no CPU, no permissions), waits for Notes and starts NotesVim.
+Turn this off with **Start with Notes** in the menu; NotesVim then has to be opened by hand and
+still quits with Notes.
+
 `install.sh` runs `scripts/setup-signing.sh` once, which creates a local self-signed code signing
 identity in its own keychain. macOS remembers the Accessibility permission per signature, so this
 keeps the permission working across rebuilds (ad hoc signing would silently lose it every time).
