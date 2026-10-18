@@ -24,6 +24,10 @@ Opening a note (clicking into it, or switching to another note) starts in Normal
 empty note starts in Insert mode, so you can type right away. Press `Esc` (or `Ctrl-[`) for Normal
 mode and `i`, `a`, `o` and friends for Insert mode.
 
+`Ctrl-h` (in Normal mode) moves to the note list, where `j` and `k` go to the next and previous
+note, `gg` and `G` to the first and last one, and `l` goes into the selected note. Other letters
+do nothing there. In Insert mode `Ctrl-h` stays backspace.
+
 | | |
 |---|---|
 | Motions | `h j k l` `w b e ge W B E gE` `0 ^ $ _ + - Enter` `gg G` `{ }` `f F t T ; ,` `%` `gj gk` `H M L` `Ctrl-d/u/f/b`, all with counts |

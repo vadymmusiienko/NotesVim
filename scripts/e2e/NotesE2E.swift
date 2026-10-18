@@ -7,6 +7,7 @@ import ApplicationServices
 import Carbon
 
 let title = "NotesVim scratch\n"
+setvbuf(stdout, nil, _IOLBF, 0)
 
 // `notes-e2e --panel <seconds>` plays a launcher like Raycast or Spotlight: a non-activating
 // panel that takes the keyboard while Notes stays the active app. Prints what was typed into it.
@@ -387,6 +388,62 @@ let scenarios: [(String, () -> String?)] = [
         let selection = range(noteBody())
         guard searching != "AXTextArea" else { return "⌥⌘F did not leave the note body" }
         return selection == NSRange(location: caret, length: 1) ? nil : "selection \(selection), expected a block on \(caret)"
+    }),
+    ("Ctrl-h goes to the note list, j k gg G move through it, l goes back into the note", {
+        setBody("ab|c")
+        let body = noteBody()
+        func shown() -> String? { attribute(body, kAXIdentifierAttribute) as? String }
+        let start = shown()
+        type("<C-h>")
+        usleep(300_000)
+        guard let list = focusedElement(), attribute(list, kAXRoleAttribute) as? String == "AXTable" else {
+            return "Ctrl-h did not focus the note list"
+        }
+        // The neighbouring notes are only shown, never focused or edited.
+        type("j")
+        usleep(400_000)
+        let next = shown()
+        type("k")
+        usleep(400_000)
+        let back = shown()
+        // Letters do not start Notes' type-to-select search.
+        type("x")
+        usleep(300_000)
+        let afterLetter = shown()
+        func selectedRow() -> Int? {
+            guard let rows = attribute(list, kAXRowsAttribute) as? [AXUIElement],
+                  let selected = (attribute(list, kAXSelectedRowsAttribute) as? [AXUIElement])?.first else { return nil }
+            return rows.firstIndex { CFEqual($0, selected) }
+        }
+        let rowCount = (attribute(list, kAXRowsAttribute) as? [AXUIElement])?.count ?? 0
+        type("G")
+        usleep(400_000)
+        let last = selectedRow()
+        type("gg")
+        usleep(400_000)
+        let first = selectedRow()
+        // Back down to the scratch note, then into it.
+        for _ in 0..<rowCount where shown() != start {
+            type("j")
+            usleep(150_000)
+        }
+        type("l")
+        usleep(400_000)
+        let focused = focusedElement()
+        let text = focused.map { attribute($0, kAXValueAttribute) as? String } ?? nil
+        let selection = focused.map(range)
+        guard next != start, back == start else {
+            return "shown notes: \(String(describing: start)) → \(String(describing: next)) → \(String(describing: back))"
+        }
+        guard afterLetter == start else { return "typing x in the list showed \(String(describing: afterLetter))" }
+        // Row 0 is the first section header.
+        guard last == rowCount - 1, first == 1 else {
+            return "G selected row \(String(describing: last)) of \(rowCount), gg row \(String(describing: first))"
+        }
+        guard text == title + "abc", selection?.length == 1 else {
+            return "after l: \(String(describing: text).debugDescription) selection \(String(describing: selection))"
+        }
+        return nil
     }),
     ("block cursor overlay on an empty line matches a selected character", {
         setBody("abc\n|\ndef")

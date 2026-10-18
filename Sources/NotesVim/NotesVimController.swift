@@ -24,6 +24,10 @@ final class NotesVimController {
     /// The note body last seen with keyboard focus, to notice when the user opens another note.
     /// Notes shows every note in the same text area, only its identifier changes.
     private var openNote: (element: AXUIElement, identifier: String?)?
+    /// Keyboard focus is on the note list, where `j` and `k` move between notes.
+    private(set) var isInNoteList = false
+    /// `g` was typed in the note list, waiting for the second `g` of `gg`.
+    private var pendingListG = false
     private var permissionTimer: Timer?
     private var syncScheduled = false
     /// The arrow key sent to end Notes' undo grouping, until Notes has processed it.
@@ -54,6 +58,7 @@ final class NotesVimController {
                 self.tap?.invalidate()
                 self.tap = nil
                 self.openNote = nil
+                self.isInNoteList = false
                 self.engine.reset()
                 self.frontmostApplicationChanged()
             }
@@ -128,11 +133,28 @@ final class NotesVimController {
         // ⌘ shortcuts always belong to Notes.
         if event.flags.contains(.maskCommand) { return false }
         guard let key = keyboard.key(for: event) else { return false }
-        if engine.mode == .insert, !key.isEscape { return false }
+        if engine.mode == .insert, !key.isEscape, !isInNoteList { return false }
 
-        guard let body = notes.focusedNoteBody() else { return false }
+        let body: AccessibilityText
+        switch notes.focus() {
+        case let .noteBody(focused):
+            body = focused
+        case .noteList:
+            setInNoteList(true)
+            return handleNoteListKey(key, in: notes)
+        case .other:
+            setInNoteList(false)
+            return false
+        }
+        setInNoteList(false)
         noticeOpenedNote(body)
         if engine.mode == .insert, !key.isEscape { return false }
+
+        if key.control, key.command == "h" {
+            // Over to the note list, like moving to the window on the left in Vim.
+            if notes.focusNoteList() { leaveNoteBody() }
+            return true
+        }
 
         settlePendingSeparator(body)
         guard let snapshot = body.snapshot() else {
@@ -147,6 +169,44 @@ final class NotesVimController {
         apply(response, to: body, text: snapshot.text, leftInsertMode: modeBefore == .insert && engine.mode != .insert)
         stateChanged()
         return true
+    }
+
+    /// The note list has no text to edit: `j` and `k` move to the next and previous note (Notes
+    /// shows it right away), `gg` and `G` to the first and last one, and `l` goes into the note.
+    /// Other characters are ignored rather than starting Notes' type-to-select search; special
+    /// keys and shortcuts work as usual.
+    private func handleNoteListKey(_ key: VimKey, in notes: NotesApplication) -> Bool {
+        let afterG = pendingListG
+        pendingListG = false
+        guard !key.control, key.special == nil else { return false }
+        switch key.command {
+        case "j": post(CGKeyCode(kVK_DownArrow), flags: [])
+        case "k": post(CGKeyCode(kVK_UpArrow), flags: [])
+        case "G": post(CGKeyCode(kVK_DownArrow), flags: .maskAlternate)
+        case "g" where afterG: post(CGKeyCode(kVK_UpArrow), flags: .maskAlternate)
+        case "g": pendingListG = true
+        case "l": notes.focusNoteBody()
+        default: break
+        }
+        return true
+    }
+
+    private func setInNoteList(_ inList: Bool) {
+        guard inList != isInNoteList else { return }
+        pendingListG = false
+        trace(inList ? "note list focused" : "note list lost focus")
+        isInNoteList = inList
+        stateChanged()
+    }
+
+    /// Focus moved away from the note body. Coming back opens the note afresh.
+    private func leaveNoteBody() {
+        guard openNote != nil else { return }
+        trace("note body lost focus")
+        openNote = nil
+        engine.reset()
+        pendingSeparator = nil
+        stateChanged()
     }
 
     private func apply(_ response: Response, to body: AccessibilityText, text: String, leftInsertMode: Bool) {
@@ -277,16 +337,11 @@ final class NotesVimController {
             scheduleSync(after: 0.03)
             return
         }
-        guard let body = notes.focusedNoteBody() else {
-            // Focus is in the note list, the search field or a sheet. Keys typed there are left
-            // alone, and coming back to the note body opens the note afresh.
-            if openNote != nil {
-                trace("note body lost focus")
-                openNote = nil
-                engine.reset()
-                pendingSeparator = nil
-                stateChanged()
-            }
+        let focus = notes.focus()
+        if case .noteList = focus { setInNoteList(true) } else { setInNoteList(false) }
+        guard case let .noteBody(body) = focus else {
+            // Focus is in the note list, the search field or a sheet.
+            leaveNoteBody()
             return
         }
         guard !noticeOpenedNote(body), engine.mode != .insert else { return }
@@ -326,7 +381,7 @@ final class NotesVimController {
     }
 
     private func stateChanged() {
-        tap?.passesTypingKeys = engine.mode == .insert
+        tap?.passesTypingKeys = engine.mode == .insert && !isInNoteList
         onStateChange?()
         updateBlockCursor()
     }

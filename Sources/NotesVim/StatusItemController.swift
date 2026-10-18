@@ -31,6 +31,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         let label: String
         let filled: Bool
         switch controller.mode {
+        // Moving through the note list with j and k feels like Normal mode.
+        case .insert where controller.isInNoteList: (label, filled) = ("N", true)
         case .insert: (label, filled) = ("I", false)
         case .normal: (label, filled) = ("N", true)
         case .visual: (label, filled) = ("V", true)
@@ -45,6 +47,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         if !controller.hasPermission { return "Needs Accessibility access" }
         if !settings.isEnabled { return "Off" }
         guard controller.isNotesActive else { return "Waiting for Notes" }
+        if controller.isInNoteList { return "Note list" }
         switch controller.mode {
         case .insert: return "Insert mode"
         case .normal: return "Normal mode"
