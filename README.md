@@ -25,7 +25,7 @@ empty note starts in Insert mode, so you can type right away. Press `Esc` (or `C
 mode and `i`, `a`, `o` and friends for Insert mode.
 
 `Ctrl-h` (in Normal mode) moves to the note list, where `j` and `k` go to the next and previous
-note, `gg` and `G` to the first and last one, and `l` goes into the selected note. Other letters
+note, `gg` and `G` to the first and last one, and `l` (or `Ctrl-l`) goes into the selected note. Other letters
 do nothing there. In Insert mode `Ctrl-h` stays backspace.
 
 | | |

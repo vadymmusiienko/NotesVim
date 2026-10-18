@@ -389,7 +389,7 @@ let scenarios: [(String, () -> String?)] = [
         guard searching != "AXTextArea" else { return "⌥⌘F did not leave the note body" }
         return selection == NSRange(location: caret, length: 1) ? nil : "selection \(selection), expected a block on \(caret)"
     }),
-    ("Ctrl-h goes to the note list, j k gg G move through it, l goes back into the note", {
+    ("Ctrl-h goes to the note list, j k gg G move through it, l and Ctrl-l go back into the note", {
         setBody("ab|c")
         let body = noteBody()
         func shown() -> String? { attribute(body, kAXIdentifierAttribute) as? String }
@@ -422,11 +422,16 @@ let scenarios: [(String, () -> String?)] = [
         type("gg")
         usleep(400_000)
         let first = selectedRow()
-        // Back down to the scratch note, then into it.
+        // Back down to the scratch note, then into it with Ctrl-l, then once more with l.
         for _ in 0..<rowCount where shown() != start {
             type("j")
             usleep(150_000)
         }
+        type("<C-l>")
+        usleep(400_000)
+        let afterControlL = focusedElement().map { attribute($0, kAXValueAttribute) as? String } ?? nil
+        type("<C-h>")
+        usleep(300_000)
         type("l")
         usleep(400_000)
         let focused = focusedElement()
@@ -440,6 +445,7 @@ let scenarios: [(String, () -> String?)] = [
         guard last == rowCount - 1, first == 1 else {
             return "G selected row \(String(describing: last)) of \(rowCount), gg row \(String(describing: first))"
         }
+        guard afterControlL == title + "abc" else { return "Ctrl-l in the list gave \(String(describing: afterControlL).debugDescription)" }
         guard text == title + "abc", selection?.length == 1 else {
             return "after l: \(String(describing: text).debugDescription) selection \(String(describing: selection))"
         }

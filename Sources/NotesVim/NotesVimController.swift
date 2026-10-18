@@ -172,12 +172,17 @@ final class NotesVimController {
     }
 
     /// The note list has no text to edit: `j` and `k` move to the next and previous note (Notes
-    /// shows it right away), `gg` and `G` to the first and last one, and `l` goes into the note.
+    /// shows it right away), `gg` and `G` to the first and last one, and `l` or `Ctrl-l` (the
+    /// way back from `Ctrl-h`) goes into the note.
     /// Other characters are ignored rather than starting Notes' type-to-select search; special
     /// keys and shortcuts work as usual.
     private func handleNoteListKey(_ key: VimKey, in notes: NotesApplication) -> Bool {
         let afterG = pendingListG
         pendingListG = false
+        if key.control, key.command == "l" {
+            notes.focusNoteBody()
+            return true
+        }
         guard !key.control, key.special == nil else { return false }
         switch key.command {
         case "j": post(CGKeyCode(kVK_DownArrow), flags: [])
