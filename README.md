@@ -20,8 +20,9 @@ keeps the permission working across rebuilds (ad hoc signing would silently lose
 
 ## Using it
 
-Notes starts in Insert mode, so typing works as usual. Press `Esc` (or `Ctrl-[`) for Normal mode.
-Switching to another note drops back to Insert mode.
+Opening a note (clicking into it, or switching to another note) starts in Normal mode. A new,
+empty note starts in Insert mode, so you can type right away. Press `Esc` (or `Ctrl-[`) for Normal
+mode and `i`, `a`, `o` and friends for Insert mode.
 
 | | |
 |---|---|
@@ -55,7 +56,9 @@ Notes-specific details:
   selection to show. The Normal mode "block cursor" is a one-character selection. Word, paragraph
   and `cw` / `dw` motions are ports of Vim's own algorithms.
 - **`NotesVim`** (the app) installs a keyboard event tap that is only enabled while Notes is
-  frontmost. In Insert mode only `Esc` is intercepted. In Normal/Visual mode it reads the
+  frontmost, and ignores keys the window server sends to another process (Raycast, Spotlight
+  and other launchers take the keyboard without becoming the active app). In Insert mode only
+  `Esc` is intercepted. In Normal/Visual mode it reads the
   focused `AXTextArea` through the Accessibility API, runs the engine, and writes back with
   `AXSelectedTextRange` + `AXSelectedText`. Edits replace only the affected range, so the rest of
   the note keeps its formatting.
@@ -73,6 +76,10 @@ Notes-specific details:
 ```
 
 `scripts/e2e.sh` drives Notes with real key presses and checks the result through Accessibility.
-It needs a note whose first line is `NotesVim scratch` to be open (it refuses to touch any other
-note), the terminal needs Accessibility access, and it takes over the keyboard for about a
-minute. `NOTESVIM_DEBUG=1 NOTESVIM_LOG=/tmp/nv.log ./scripts/e2e.sh` traces every key.
+It needs a note whose first line is `NotesVim scratch` to be open (it refuses to edit any other
+note), the terminal needs Accessibility and Screen Recording access (one test compares on-screen
+colours), and it takes over the keyboard and mouse for about a minute. Besides the key sequences
+it checks switching notes (it creates a second note, `NotesVim scratch 2`, once), a new note (it
+creates one and deletes it again), the block cursor overlay, and a launcher panel taking the
+keyboard. `./scripts/e2e.sh scenarios` runs only those.
+`NOTESVIM_DEBUG=1 NOTESVIM_LOG=/tmp/nv.log ./scripts/e2e.sh` traces every key.

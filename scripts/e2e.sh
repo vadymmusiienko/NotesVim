@@ -15,6 +15,7 @@ swiftc -O scripts/e2e/NotesE2E.swift -o "$OUT/notes-e2e"
 pkill -x NotesVim 2>/dev/null || true
 NOTESVIM_DEBUG="${NOTESVIM_DEBUG:-0}" "$BIN" 2>"${NOTESVIM_LOG:-/dev/null}" &
 NOTESVIM=$!
+disown "$NOTESVIM"
 trap 'kill $NOTESVIM 2>/dev/null || true; command rm -rf "$OUT"' EXIT
 sleep 1
 "$OUT/notes-e2e" "$@"

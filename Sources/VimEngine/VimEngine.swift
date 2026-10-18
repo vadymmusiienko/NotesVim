@@ -78,12 +78,24 @@ public final class VimEngine {
         }
     }
 
-    /// Back to Insert mode, forgetting any pending keys. Used when focus moves elsewhere.
+    /// Back to Insert mode, forgetting any pending keys.
     public func reset() {
         mode = .insert
         pending = []
         insertSession = nil
         rendered = nil
+    }
+
+    /// Starts over in Normal mode with the block cursor where the caret is, as when the user
+    /// opens a note. Returns the selection that shows the block cursor.
+    public func enterNormalMode(in snapshot: Snapshot) -> NSRange {
+        reset()
+        mode = .normal
+        let buffer = TextBuffer(snapshot.text)
+        adopt(snapshot, buffer)
+        let selection = selection(in: buffer)
+        rendered = Snapshot(text: snapshot.text, selection: selection)
+        return selection
     }
 
     /// The text and selection the element should show right now, outside Insert mode.
@@ -96,19 +108,11 @@ public final class VimEngine {
         rendered = snapshot
     }
 
-    /// Call when the selection or text changed outside the engine (mouse click, undo, find).
-    /// Returns the selection that restores the block cursor, if it needs restoring.
-    ///
-    /// When the text itself changed and `textChangeResetsMode` is true (the user switched to
-    /// another note, or pasted with ⌘V) the engine drops back to Insert mode, so that what
-    /// is on screen (a thin caret) matches the mode.
-    public func synchronize(with snapshot: Snapshot, textChangeResetsMode: Bool) -> NSRange? {
+    /// Call when the selection or text changed outside the engine (mouse click, undo, paste,
+    /// find). Returns the selection that restores the block cursor, if it needs restoring.
+    public func synchronize(with snapshot: Snapshot) -> NSRange? {
         guard mode != .insert else { return nil }
         if let rendered, rendered == snapshot { return nil }
-        if textChangeResetsMode, let rendered, rendered.text != snapshot.text {
-            reset()
-            return nil
-        }
         let buffer = TextBuffer(snapshot.text)
         adopt(snapshot, buffer)
         let selection = selection(in: buffer)

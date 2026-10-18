@@ -24,7 +24,7 @@ final class Harness {
         press(.escape)
         // Escape moved the cursor one character left; put it back where the test asked for it.
         selection = NSRange(location: caret, length: 0)
-        if let restored = engine.synchronize(with: snapshot, textChangeResetsMode: false) { selection = restored }
+        if let restored = engine.synchronize(with: snapshot) { selection = restored }
     }
 
     var snapshot: Snapshot { Snapshot(text: text, selection: selection) }
@@ -43,7 +43,7 @@ final class Harness {
     /// Clicks somewhere, like the user would with the mouse.
     func click(_ location: Int) {
         selection = NSRange(location: location, length: 0)
-        if let restored = engine.synchronize(with: snapshot, textChangeResetsMode: false) { selection = restored }
+        if let restored = engine.synchronize(with: snapshot) { selection = restored }
     }
 
     @discardableResult

@@ -249,23 +249,35 @@ import Testing
 }
 
 @Suite struct SynchronizationTests {
-    @Test func externalTextChangeDropsToInsertMode() {
-        let h = Harness("|abc")
-        let selection = h.engine.synchronize(with: Snapshot(text: "another note", selection: NSRange(location: 0, length: 0)), textChangeResetsMode: true)
-        #expect(selection == nil)
-        #expect(h.mode == .insert)
+    @Test func enteringANoteStartsInNormalMode() {
+        let engine = VimEngine()
+        let selection = engine.enterNormalMode(in: Snapshot(text: "one\ntwo", selection: NSRange(location: 5, length: 0)))
+        #expect(selection == NSRange(location: 5, length: 1))
+        #expect(engine.mode == .normal)
     }
 
-    @Test func externalTextChangeAfterUndoKeepsNormalMode() {
+    @Test func enteringANoteClampsTheCaretOntoTheLastCharacter() {
+        let engine = VimEngine()
+        let selection = engine.enterNormalMode(in: Snapshot(text: "one\ntwo", selection: NSRange(location: 3, length: 0)))
+        #expect(selection == NSRange(location: 2, length: 1))
+    }
+
+    @Test func enteringANoteForgetsPendingKeys() {
+        let h = Harness("|abc").keys("d")
+        _ = h.engine.enterNormalMode(in: h.snapshot)
+        #expect(h.keys("x").marked == "|bc")
+    }
+
+    @Test func externalTextChangeKeepsNormalMode() {
         let h = Harness("|abc")
-        let selection = h.engine.synchronize(with: Snapshot(text: "abcd", selection: NSRange(location: 1, length: 2)), textChangeResetsMode: false)
+        let selection = h.engine.synchronize(with: Snapshot(text: "abcd", selection: NSRange(location: 1, length: 2)))
         #expect(selection == NSRange(location: 1, length: 1))
         #expect(h.mode == .normal)
     }
 
     @Test func unchangedStateNeedsNoUpdate() {
         let h = Harness("|abc")
-        #expect(h.engine.synchronize(with: h.snapshot, textChangeResetsMode: true) == nil)
+        #expect(h.engine.synchronize(with: h.snapshot) == nil)
         #expect(h.mode == .normal)
     }
 }

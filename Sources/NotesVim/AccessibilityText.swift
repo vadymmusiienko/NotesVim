@@ -1,5 +1,5 @@
+import AppKit
 import ApplicationServices
-import Foundation
 import VimEngine
 
 /// Reads and writes the text of one Accessibility element (the Notes note body).
@@ -25,25 +25,55 @@ struct AccessibilityText {
         }
     }
 
+    /// Identifies the note on display. Notes shows every note in the same text area, so this
+    /// is how a switch to another note is noticed.
+    var noteIdentifier: String? { attribute(kAXIdentifierAttribute) }
+
     /// Screen rectangle (top-left origin, like all Accessibility geometry) where a block cursor
     /// at `location` should be drawn when there is no character to select: on an empty line or
-    /// at the end of the note.
-    func emptyCursorBounds(at location: Int, in text: NSString) -> CGRect? {
-        let rect: CGRect?
+    /// in an empty note. It sits where Notes draws the caret on that line, as tall as a selected
+    /// character in the line's font and half as wide as it is tall.
+    ///
+    /// Notes reports a collapsed range at the start of a line on the line before it, so the
+    /// empty line is located from the characters around it instead.
+    @MainActor func emptyCursorBounds(at location: Int, in text: NSString) -> CGRect? {
+        let line: CGRect
+        let fontLocation: Int?
         if location < text.length {
-            // The line break's own box sits on the right line; a collapsed range reports the line above.
-            rect = bounds(NSRange(location: location, length: 1))
-        } else if location > 0, text.character(at: location - 1) == 0x0A,
-                  let lineBreak = bounds(NSRange(location: location - 1, length: 1)),
-                  let textStart = bounds(NSRange(location: 0, length: 0)) {
-            // Empty last line: one line below the final line break, at the left text margin.
-            rect = CGRect(x: textStart.minX, y: lineBreak.maxY, width: 0, height: lineBreak.height)
+            // The empty line's own line break covers the whole line.
+            guard let lineBreak = bounds(NSRange(location: location, length: 1)) else { return nil }
+            line = lineBreak
+            fontLocation = location
+        } else if location > 0 {
+            // Empty last line: right below the final line break, at the left text margin.
+            guard let lineBreak = bounds(NSRange(location: location - 1, length: 1)),
+                  let start = bounds(NSRange(location: 0, length: 0)) else { return nil }
+            line = CGRect(x: start.minX, y: lineBreak.maxY, width: 0, height: lineBreak.height)
+            fontLocation = location - 1
         } else {
-            rect = bounds(NSRange(location: location, length: 0))
+            // Empty note: reported as a line above the first one.
+            guard let above = bounds(NSRange(location: 0, length: 0)) else { return nil }
+            line = above.offsetBy(dx: 0, dy: above.height)
+            fontLocation = nil
         }
-        guard let rect, rect.height > 0 else { return nil }
-        return CGRect(x: rect.minX, y: rect.minY, width: (rect.height * 0.52).rounded(), height: rect.height)
+        let height = min(fontLocation.flatMap(lineHeight(at:)) ?? line.height, line.height)
+        guard height > 0 else { return nil }
+        return CGRect(x: line.minX, y: line.minY, width: height / 2, height: height)
     }
+
+    /// Line height of the font at `location`, the height Notes gives a selected character.
+    @MainActor private func lineHeight(at location: Int) -> CGFloat? {
+        var cfRange = CFRange(location: location, length: 1)
+        guard let parameter = AXValueCreate(.cfRange, &cfRange),
+              let string = parameterized("AXAttributedStringForRange", parameter) as? NSAttributedString,
+              string.length > 0,
+              let font = string.attribute(NSAttributedString.Key("AXFont"), at: 0, effectiveRange: nil) as? [String: Any],
+              let name = font["AXFontName"] as? String,
+              let size = (font["AXFontSize"] as? NSNumber).map({ CGFloat($0.doubleValue) }) else { return nil }
+        return Self.layoutManager.defaultLineHeight(for: NSFont(name: name, size: size) ?? .systemFont(ofSize: size))
+    }
+
+    @MainActor private static let layoutManager = NSLayoutManager()
 
     private func bounds(_ range: NSRange) -> CGRect? {
         var cfRange = CFRange(location: range.location, length: range.length)

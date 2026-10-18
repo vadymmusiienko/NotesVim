@@ -5,12 +5,12 @@ import VimEngine
 
 /// Connects the keyboard, Notes and the Vim engine.
 ///
-/// Every key press while Notes is frontmost goes through `handleKeyDown`. In Insert mode that
-/// is a dictionary lookup and nothing else, unless the key is Escape. In Normal and Visual mode
-/// the note body is read through Accessibility, the engine computes the result, and the edits
-/// and new selection are written back before the next key is processed. Shortcuts NotesVim
-/// sends to Notes (undo, the undo separator) go straight to the Notes process, so NotesVim can
-/// wait for them to finish and everything stays strictly sequential.
+/// Key presses on their way to Notes come through `handleKeyDown`, except while typing in
+/// Insert mode, which the event tap lets through by itself. In Normal and Visual mode the note
+/// body is read through Accessibility, the engine computes the result, and the edits and new
+/// selection are written back before the next key is processed. Shortcuts NotesVim sends to
+/// Notes (undo, the undo separator) go straight to the Notes process, so NotesVim can wait for
+/// them to finish and everything stays strictly sequential.
 @MainActor
 final class NotesVimController {
     let settings: Settings
@@ -19,10 +19,11 @@ final class NotesVimController {
     private let engine = VimEngine(clipboard: SystemClipboard())
     private let keyboard = KeyboardLayout()
     private let blockCursor = BlockCursorOverlay()
-    private lazy var tap = KeyEventTap { [unowned self] type, event in self.handle(type, event) }
+    private var tap: KeyEventTap?
     private var notes: NotesApplication?
-    private var lastFocusedElement: AXUIElement?
-    private var swallowedKeyUps = Set<Int64>()
+    /// The note body last seen with keyboard focus, to notice when the user opens another note.
+    /// Notes shows every note in the same text area, only its identifier changes.
+    private var openNote: (element: AXUIElement, identifier: String?)?
     private var permissionTimer: Timer?
     private var syncScheduled = false
     /// The arrow key sent to end Notes' undo grouping, until Notes has processed it.
@@ -37,7 +38,7 @@ final class NotesVimController {
 
     var mode: Mode { engine.mode }
     var isNotesActive: Bool { notes != nil && NSWorkspace.shared.frontmostApplication?.bundleIdentifier == NotesApplication.bundleIdentifier }
-    var hasPermission: Bool { tap.isInstalled }
+    private(set) var hasPermission = false
 
     func start() {
         let center = NSWorkspace.shared.notificationCenter
@@ -50,17 +51,20 @@ final class NotesVimController {
             MainActor.assumeIsolated {
                 guard let self, pid == self.notes?.processIdentifier else { return }
                 self.notes = nil
+                self.tap?.invalidate()
+                self.tap = nil
+                self.openNote = nil
                 self.engine.reset()
                 self.frontmostApplicationChanged()
             }
         }
         settings.onChange = { [weak self] in self?.settingsChanged() }
         engine.verticalMovesUseScreenLines = settings.verticalMovesUseScreenLines
-        installTapWhenPermitted(prompt: true)
+        checkPermission(prompt: true)
     }
 
     func openAccessibilitySettings() {
-        installTapWhenPermitted(prompt: true)
+        checkPermission(prompt: true)
         if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
             NSWorkspace.shared.open(url)
         }
@@ -68,9 +72,10 @@ final class NotesVimController {
 
     // MARK: Lifecycle
 
-    private func installTapWhenPermitted(prompt: Bool) {
+    private func checkPermission(prompt: Bool) {
         let options = ["AXTrustedCheckOptionPrompt": prompt] as CFDictionary
-        if AXIsProcessTrustedWithOptions(options), tap.install() {
+        hasPermission = AXIsProcessTrustedWithOptions(options)
+        if hasPermission {
             permissionTimer?.invalidate()
             permissionTimer = nil
             frontmostApplicationChanged()
@@ -78,26 +83,28 @@ final class NotesVimController {
         }
         guard permissionTimer == nil else { return }
         permissionTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.installTapWhenPermitted(prompt: false) }
+            MainActor.assumeIsolated { self?.checkPermission(prompt: false) }
         }
     }
 
     private func frontmostApplicationChanged() {
         let frontmost = NSWorkspace.shared.frontmostApplication
-        if frontmost?.bundleIdentifier == NotesApplication.bundleIdentifier, let pid = frontmost?.processIdentifier {
+        if hasPermission, frontmost?.bundleIdentifier == NotesApplication.bundleIdentifier, let pid = frontmost?.processIdentifier {
             if notes?.processIdentifier != pid {
                 engine.reset()
+                openNote = nil
                 pendingSeparator = nil
                 let application = NotesApplication(processIdentifier: pid)
                 application.onChange = { [weak self] in self?.scheduleSync() }
                 notes = application
+                tap?.invalidate()
+                tap = KeyEventTap(processIdentifier: pid) { [weak self] event in self?.handleKeyDown(event) ?? false }
+                if tap == nil { trace("could not create the event tap for Notes") }
             }
-            tap.isEnabled = settings.isEnabled && tap.isInstalled
             scheduleSync()
-        } else {
-            tap.isEnabled = false
-            swallowedKeyUps.removeAll()
         }
+        // The tap only ever sees keys sent to Notes, so it can stay on while Notes is in the background.
+        tap?.isEnabled = settings.isEnabled
         stateChanged()
     }
 
@@ -110,18 +117,11 @@ final class NotesVimController {
             }
             engine.reset()
         }
+        openNote = nil
         frontmostApplicationChanged()
     }
 
     // MARK: Keys
-
-    private func handle(_ type: CGEventType, _ event: CGEvent) -> Bool {
-        let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
-        if type == .keyUp { return swallowedKeyUps.remove(keyCode) != nil }
-        guard handleKeyDown(event) else { return false }
-        swallowedKeyUps.insert(keyCode)
-        return true
-    }
 
     private func handleKeyDown(_ event: CGEvent) -> Bool {
         guard settings.isEnabled, let notes else { return false }
@@ -131,13 +131,7 @@ final class NotesVimController {
         if engine.mode == .insert, !key.isEscape { return false }
 
         guard let body = notes.focusedNoteBody() else { return false }
-        if let last = lastFocusedElement, !CFEqual(last, body.element) {
-            trace("focused element changed, back to Insert mode")
-            engine.reset()
-            pendingSeparator = nil
-            stateChanged()
-        }
-        lastFocusedElement = body.element
+        noticeOpenedNote(body)
         if engine.mode == .insert, !key.isEscape { return false }
 
         settlePendingSeparator(body)
@@ -146,14 +140,6 @@ final class NotesVimController {
             return engine.mode != .insert
         }
         let modeBefore = engine.mode
-        if engine.mode != .insert {
-            _ = engine.synchronize(with: snapshot, textChangeResetsMode: true)
-            if engine.mode == .insert, !key.isEscape {
-                trace("text changed outside NotesVim, back to Insert mode")
-                stateChanged()
-                return false
-            }
-        }
 
         let response = engine.handle(key, in: snapshot, layout: body)
         trace("key \(key) sel \(snapshot.selection) -> \(engine.mode) edits \(response.edits) sel \(String(describing: response.selection)) actions \(response.actions)")
@@ -175,7 +161,7 @@ final class NotesVimController {
         }
         if !response.actions.isEmpty {
             for action in response.actions { perform(action, in: body) }
-            if let snapshot = body.snapshot(), let selection = engine.synchronize(with: snapshot, textChangeResetsMode: false) {
+            if let snapshot = body.snapshot(), let selection = engine.synchronize(with: snapshot) {
                 body.select(selection)
             }
         }
@@ -271,10 +257,10 @@ final class NotesVimController {
 
     // MARK: Keeping the block cursor in place
 
-    private func scheduleSync() {
+    private func scheduleSync(after delay: TimeInterval = 0) {
         guard !syncScheduled else { return }
         syncScheduled = true
-        DispatchQueue.main.async { [weak self] in
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
             MainActor.assumeIsolated {
                 self?.syncScheduled = false
                 self?.syncNow()
@@ -283,33 +269,64 @@ final class NotesVimController {
     }
 
     /// Runs after selection or focus changes reported by Notes: mouse clicks, Find, the undo
-    /// separator. Puts the block cursor back where the caret now is, or drops to Insert mode if
-    /// the user moved to a different note.
+    /// separator, opening another note. Puts the block cursor back where the caret now is.
     private func syncNow() {
-        guard settings.isEnabled, engine.mode != .insert, isNotesActive, let body = notes?.focusedNoteBody() else { return }
-        if let last = lastFocusedElement, !CFEqual(last, body.element) {
-            trace("focused element changed, back to Insert mode")
-            engine.reset()
-            pendingSeparator = nil
-            stateChanged()
+        guard settings.isEnabled, isNotesActive, let notes else { return }
+        // Notes is still placing the caret or extending a selection with the mouse.
+        if NSEvent.pressedMouseButtons != 0 {
+            scheduleSync(after: 0.03)
             return
         }
+        guard let body = notes.focusedNoteBody() else {
+            // Focus is in the note list, the search field or a sheet. Keys typed there are left
+            // alone, and coming back to the note body opens the note afresh.
+            if openNote != nil {
+                trace("note body lost focus")
+                openNote = nil
+                engine.reset()
+                pendingSeparator = nil
+                stateChanged()
+            }
+            return
+        }
+        guard !noticeOpenedNote(body), engine.mode != .insert else { return }
         if let pending = pendingSeparator, let current = body.selection(), current != pending.expected {
             settlePendingSeparator(body)
             return
         }
         guard let snapshot = body.snapshot() else { return }
-        let before = engine.mode
-        if let selection = engine.synchronize(with: snapshot, textChangeResetsMode: true) {
+        if let selection = engine.synchronize(with: snapshot) {
             trace("sync \(snapshot.selection) -> block \(selection)")
             body.select(selection)
             if let actual = body.snapshot() { engine.confirm(actual) }
         }
-        if before != engine.mode { trace("sync changed mode \(before) -> \(engine.mode)") }
         stateChanged()
     }
 
+    /// Starts over when the note body gets focus or shows another note: in Normal mode to read
+    /// and move around an existing note, in Insert mode for a new, empty one so typing can start
+    /// right away. Returns whether that happened.
+    @discardableResult
+    private func noticeOpenedNote(_ body: AccessibilityText) -> Bool {
+        let identifier = body.noteIdentifier
+        if let openNote, CFEqual(openNote.element, body.element), openNote.identifier == identifier { return false }
+        openNote = (body.element, identifier)
+        pendingSeparator = nil
+        if let snapshot = body.snapshot(), !snapshot.text.isEmpty {
+            let selection = engine.enterNormalMode(in: snapshot)
+            trace("opened note \(identifier ?? "?"), Normal mode, block \(selection)")
+            body.select(selection)
+            if let actual = body.snapshot() { engine.confirm(actual) }
+        } else {
+            trace("opened empty note \(identifier ?? "?"), Insert mode")
+            engine.reset()
+        }
+        stateChanged()
+        return true
+    }
+
     private func stateChanged() {
+        tap?.passesTypingKeys = engine.mode == .insert
         onStateChange?()
         updateBlockCursor()
     }
