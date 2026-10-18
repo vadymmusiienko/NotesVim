@@ -445,6 +445,23 @@ let scenarios: [(String, () -> String?)] = [
         }
         return nil
     }),
+    ("the menu bar icon is only there while Notes is active", {
+        // Menu bar items are listed in the app's extras menu bar while they are shown.
+        func iconShown() -> Bool {
+            guard let app = NSWorkspace.shared.runningApplications.first(where: { $0.executableURL?.lastPathComponent == "NotesVim" }),
+                  let bar = attribute(AXUIElementCreateApplication(app.processIdentifier), "AXExtrasMenuBar"),
+                  CFGetTypeID(bar) == AXUIElementGetTypeID() else { return false }
+            return ((attribute(bar as! AXUIElement, kAXChildrenAttribute) as? [AXUIElement])?.count ?? 0) > 0
+        }
+        let inNotes = iconShown()
+        NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.finder").first?.activate()
+        usleep(600_000)
+        let inFinder = iconShown()
+        notes.activate()
+        usleep(600_000)
+        let backInNotes = iconShown()
+        return inNotes && !inFinder && backInNotes ? nil : "icon shown in Notes \(inNotes), in Finder \(inFinder), back in Notes \(backInNotes)"
+    }),
     ("block cursor overlay on an empty line matches a selected character", {
         setBody("abc\n|\ndef")
         usleep(200_000)

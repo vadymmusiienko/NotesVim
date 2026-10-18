@@ -3,7 +3,7 @@ import ServiceManagement
 import VimEngine
 
 /// Menu bar badge showing the current mode (N, I, V, VL) plus a small settings menu.
-/// The badge is dimmed whenever Notes is not the active app.
+/// It is only in the menu bar while Notes is the active app, and dimmed when Vim keys are off.
 @MainActor
 final class StatusItemController: NSObject, NSMenuDelegate {
     private let controller: NotesVimController
@@ -21,6 +21,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         self.controller = controller
         self.settings = settings
         super.init()
+        // Keeps its place in the menu bar each time it comes back.
+        item.autosaveName = "NotesVim"
         item.button?.setAccessibilityTitle("NotesVim")
         item.menu = buildMenu()
         update()
@@ -38,6 +40,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         case .visual: (label, filled) = ("V", true)
         case .visualLine: (label, filled) = ("VL", true)
         }
+        // Without the permission it stays visible everywhere, so access can be granted from its menu.
+        item.isVisible = controller.isNotesActive || !controller.hasPermission
         button.image = badge(label, filled: filled)
         button.appearsDisabled = !(controller.isNotesActive && settings.isEnabled && controller.hasPermission)
         button.toolTip = "NotesVim: \(statusText)"

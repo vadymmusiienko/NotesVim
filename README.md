@@ -11,8 +11,8 @@ frontmost it reads keys before Notes does; in every other app it is switched off
 
 This builds `NotesVim.app`, copies it to `~/Applications` and starts it. On first launch, allow
 it in **System Settings → Privacy & Security → Accessibility**. The menu bar badge shows the
-mode: **N** (Normal), **I** (Insert, outlined), **V** / **VL** (Visual); it is dimmed when Notes
-is not active.
+mode: **N** (Normal), **I** (Insert, outlined), **V** / **VL** (Visual). It is only in the menu bar
+while Notes is the active app (and everywhere until the permission is granted).
 
 `install.sh` runs `scripts/setup-signing.sh` once, which creates a local self-signed code signing
 identity in its own keychain. macOS remembers the Accessibility permission per signature, so this
