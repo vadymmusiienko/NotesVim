@@ -6,6 +6,8 @@ NotesVim is a tiny menu bar app for macOS. While you are in Notes, `Esc` turns t
 Vim block and `h j k l`, `w b e`, `dd`, `ciw`, `.` and friends work as you would expect. Every
 other app is left completely alone. It starts when Notes starts and quits when Notes quits.
 
+![NotesVim in action: Normal mode, editing with w, ciw, dd, p, u and o, then moving through the note list with Ctrl-h, j and l](docs/demo.gif)
+
 ## Install
 
 1. Download `NotesVim-<version>.dmg` from the

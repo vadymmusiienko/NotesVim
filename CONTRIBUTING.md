@@ -13,6 +13,7 @@ Only the Xcode Command Line Tools are needed (`xcode-select --install`), not Xco
 ./scripts/build-app.sh     # build/NotesVim.app (Apple Silicon + Intel)
 ./scripts/make-dmg.sh      # dist/NotesVim-<version>.dmg, the file attached to releases
 ./scripts/e2e.sh           # end-to-end test against the real Notes app (see below)
+./scripts/record-demo.sh   # re-record docs/demo.gif (uses a "NotesVim Demo" folder in Notes)
 ```
 
 `install.sh` runs `scripts/setup-signing.sh` once, which creates a self-signed code signing
