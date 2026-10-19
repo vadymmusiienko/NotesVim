@@ -9,9 +9,11 @@ APP="build/NotesVim.app"
 
 LAUNCHER="$APP/Contents/Library/LoginItems/NotesVimLauncher.app"
 
-swift build -c release --scratch-path .build/app --product NotesVim
-swift build -c release --scratch-path .build/app --product NotesVimLauncher
-BIN_DIR="$(swift build -c release --scratch-path .build/app --show-bin-path)"
+# One binary for both Apple Silicon and Intel Macs.
+BUILD=(swift build -c release --scratch-path .build/app --arch arm64 --arch x86_64)
+"${BUILD[@]}" --product NotesVim
+"${BUILD[@]}" --product NotesVimLauncher
+BIN_DIR="$("${BUILD[@]}" --show-bin-path)"
 
 command rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$LAUNCHER/Contents/MacOS"

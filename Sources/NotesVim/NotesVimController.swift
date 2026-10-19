@@ -65,14 +65,15 @@ final class NotesVimController {
         }
         settings.onChange = { [weak self] in self?.settingsChanged() }
         engine.verticalMovesUseScreenLines = settings.verticalMovesUseScreenLines
-        checkPermission(prompt: true)
+        // The welcome window asks for the permission, with an explanation first.
+        checkPermission(prompt: false)
     }
 
-    func openAccessibilitySettings() {
-        checkPermission(prompt: true)
-        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
-            NSWorkspace.shared.open(url)
-        }
+    /// Leaves the note with a normal caret and stops handling keys, before uninstalling.
+    func stop() {
+        settings.isEnabled = false
+        tap?.invalidate()
+        tap = nil
     }
 
     // MARK: Lifecycle

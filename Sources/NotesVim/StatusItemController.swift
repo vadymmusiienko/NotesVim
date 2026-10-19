@@ -8,6 +8,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private let controller: NotesVimController
     private let settings: Settings
     private let lifecycle: Lifecycle
+    private let welcome: WelcomeWindow
     private let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private var imageCache: [String: NSImage] = [:]
 
@@ -17,10 +18,11 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private let screenLinesItem = NSMenuItem(title: "j and k Move by Visual Lines", action: #selector(toggleScreenLines), keyEquivalent: "")
     private let startWithNotesItem = NSMenuItem(title: "Start with Notes", action: #selector(toggleStartWithNotes), keyEquivalent: "")
 
-    init(controller: NotesVimController, settings: Settings, lifecycle: Lifecycle) {
+    init(controller: NotesVimController, settings: Settings, lifecycle: Lifecycle, welcome: WelcomeWindow) {
         self.controller = controller
         self.settings = settings
         self.lifecycle = lifecycle
+        self.welcome = welcome
         super.init()
         // Keeps its place in the menu bar each time it comes back.
         item.autosaveName = "NotesVim"
@@ -74,6 +76,13 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         menu.addItem(.separator())
         menu.addItem(startWithNotesItem)
         menu.addItem(.separator())
+        for (title, action) in [("About NotesVim", #selector(showAbout)), ("Welcome Guide…", #selector(grantAccess)),
+                                ("Uninstall NotesVim…", #selector(uninstall))] {
+            let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
+            item.target = self
+            menu.addItem(item)
+        }
+        menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "Quit NotesVim", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
         return menu
     }
@@ -88,7 +97,25 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             ? "Start with Notes (Allow in Login Items…)" : "Start with Notes"
     }
 
-    @objc private func grantAccess() { controller.openAccessibilitySettings() }
+    @objc private func grantAccess() { welcome.show() }
+
+    @objc private func showAbout() {
+        NSApp.activate()
+        NSApp.orderFrontStandardAboutPanel(nil)
+    }
+
+    @objc private func uninstall() {
+        NSApp.activate()
+        let alert = NSAlert()
+        alert.messageText = "Uninstall NotesVim?"
+        alert.informativeText = "This moves NotesVim to the Trash and removes its launcher, its Accessibility permission and its settings. Your notes are not touched."
+        alert.addButton(withTitle: "Uninstall")
+        alert.addButton(withTitle: "Cancel")
+        alert.buttons.first?.hasDestructiveAction = true
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        controller.stop()
+        lifecycle.uninstall()
+    }
 
     @objc private func toggleEnabled() { settings.isEnabled.toggle() }
 

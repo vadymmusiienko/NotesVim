@@ -1,95 +1,97 @@
 # NotesVim
 
-Vim keybindings for Apple Notes, and only for Apple Notes. A tiny menu bar app: while Notes is
-frontmost it reads keys before Notes does; in every other app it is switched off completely.
+Vim keys for Apple Notes, and only for Apple Notes.
+
+NotesVim is a tiny menu bar app for macOS. While you are in Notes, `Esc` turns the cursor into a
+Vim block and `h j k l`, `w b e`, `dd`, `ciw`, `.` and friends work as you would expect. Every
+other app is left completely alone. It starts when Notes starts and quits when Notes quits.
 
 ## Install
 
-```sh
-./scripts/install.sh
-```
+1. Download `NotesVim-<version>.dmg` from the
+   [latest release](https://github.com/vadymmusiienko/NotesVim/releases/latest).
+2. Open it and drag **NotesVim** onto **Applications**.
+3. Open NotesVim from Applications. macOS will say it _cannot verify that NotesVim is free of
+   malware_. That is because NotesVim is not notarized by Apple (which needs a paid developer
+   account), not because anything is wrong with it. To open it anyway:
+   - **macOS 15 or later:** click **Done**, open **System Settings → Privacy & Security**, scroll
+     down to _"NotesVim" was blocked to protect your Mac_, click **Open Anyway** and confirm.
+   - **macOS 14:** Control-click NotesVim in Applications, choose **Open**, then **Open** again.
 
-This builds `NotesVim.app`, copies it to `~/Applications` and starts it. On first launch, allow
-it in **System Settings → Privacy & Security → Accessibility**. The menu bar badge shows the
-mode: **N** (Normal), **I** (Insert, outlined), **V** / **VL** (Visual). It is only in the menu bar
-while Notes is the active app (and everywhere until the permission is granted).
+   You only need to do this once.
 
-NotesVim runs exactly while Notes runs: it starts when Notes starts and quits when Notes quits.
-macOS cannot start one app along with another, so a tiny login item inside the app, **NotesVim
-Launcher** (about 3 MB of memory, no CPU, no permissions), waits for Notes and starts NotesVim.
-Turn this off with **Start with Notes** in the menu; NotesVim then has to be opened by hand and
-still quits with Notes.
+4. The welcome window walks you through the rest. The one thing NotesVim needs is the
+   **Accessibility** permission: click **Open Accessibility Settings** and switch on
+   **NotesVim** in the list (if it is not there, click **+** and choose NotesVim in
+   Applications). The window ticks the step off as soon as it works.
 
-`install.sh` runs `scripts/setup-signing.sh` once, which creates a local self-signed code signing
-identity in its own keychain. macOS remembers the Accessibility permission per signature, so this
-keeps the permission working across rebuilds (ad hoc signing would silently lose it every time).
+That's it. Open a note and press `Esc`.
 
 ## Using it
 
-Opening a note (clicking into it, or switching to another note) starts in Normal mode. A new,
-empty note starts in Insert mode, so you can type right away. Press `Esc` (or `Ctrl-[`) for Normal
-mode and `i`, `a`, `o` and friends for Insert mode.
+Opening a note starts in Normal mode, with a block cursor. A new, empty note starts in Insert mode
+so you can type right away. `Esc` (or `Ctrl-[`) goes to Normal mode, `i`, `a`, `o` and friends to
+Insert mode.
 
-`Ctrl-h` (in Normal mode) moves to the note list, where `j` and `k` go to the next and previous
-note, `gg` and `G` to the first and last one, and `l` (or `Ctrl-l`) goes into the selected note. Other letters
-do nothing there. In Insert mode `Ctrl-h` stays backspace.
+|                    |                                                                                                                                                 |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| Motions            | `h j k l` `w b e ge W B E gE` `0 ^ $ _ + - Enter` `gg G` `{ }` `f F t T ; ,` `%` `gj gk` `H M L` `Ctrl-d/u/f/b`, all with counts                |
+| Operators          | `d c y` with any motion, `dd cc yy`, and text objects `iw aw iW aW i" a" i' a' i( a( ib i[ i{ iB i< ip ap`                                      |
+| Edits              | `x X s S D C Y r ~ J p P o O i a I A gI .`                                                                                                      |
+| Visual             | `v V`, motions, text objects, `o d x X D c s C S y Y ~ u U r J p > <`                                                                           |
+| Undo, indent, find | `u` / `Ctrl-r`, `>>` / `<<`, `/` `?` `n` `N` (done by Notes itself)                                                                             |
+| Note list          | `Ctrl-h` goes to the list; there `j` / `k` move between notes, `gg` / `G` jump to the first / last one, `l` or `Ctrl-l` goes back into the note |
 
-| | |
-|---|---|
-| Motions | `h j k l` `w b e ge W B E gE` `0 ^ $ _ + - Enter` `gg G` `{ }` `f F t T ; ,` `%` `gj gk` `H M L` `Ctrl-d/u/f/b`, all with counts |
-| Operators | `d c y` with any motion, `dd cc yy`, and text objects `iw aw iW aW i" a" i' a' i( a( ib i[ i{ iB i< ip ap` |
-| Edits | `x X s S D C Y r ~ J p P o O i a I A gI .` |
-| Visual | `v V`, motions, text objects, `o d x X D c s C S y Y ~ u U r J p > <` |
-| Delegated to Notes | `u` / `Ctrl-r` (undo/redo), `>>` / `<<` (indent), `/` `?` (Find), `n` `N` |
+The menu bar badge shows the mode: **N** (Normal), **I** (Insert), **V** / **VL** (Visual). It is
+only there while Notes is the active app. Its menu can switch Vim keys off, choose whether `j` /
+`k` move by visual (wrapped) lines (the default, since Notes paragraphs usually wrap), and turn off
+**Start with Notes**.
 
-Menu options: turn Vim keys off, and choose whether `j`/`k` move by visual (wrapped) lines,
-which is the default because Notes paragraphs usually wrap.
+Good to know:
 
-Notes-specific details:
-
-- Yank, delete and put use the system clipboard (like `clipboard=unnamedplus`). Linewise yanks
-  survive clipboard tools that rewrite the clipboard (Pure Paste, Raycast, ...).
+- Yank, delete and put use the system clipboard.
 - `i"` / `a"` also match Notes' smart quotes “…”, and `i'` matches ‘…’.
 - Commands work on non-Latin keyboard layouts (Russian, Ukrainian, ...): `j` is still the `j`
   key, while `f` and `r` use the letter you actually type.
-- `u` is one Vim change, and `cw` plus the text you type is one undo step, as in Vim. Text typed with `i` right next to a change you just
-  made (for example `dw` followed by `i…`) shares one undo step with that change.
+- `u` undoes one Vim change, as in Vim.
 - ⌘ shortcuts always go straight to Notes.
-- The block cursor is Notes' own one-character selection. On empty lines and in empty notes,
-  where there is no character to select, a small overlay draws the block instead (the same idea
-  VimMode.spoon uses for its cursor).
+- Only Notes' list view is supported in the note list, not the gallery view.
 
-## How it works
+## Privacy
 
-- **`VimEngine`** (pure Swift, no AppKit) is the Vim state machine. Given a key and a snapshot
-  of the note body (text plus selection, in UTF-16 offsets), it returns text edits and the
-  selection to show. The Normal mode "block cursor" is a one-character selection. Word, paragraph
-  and `cw` / `dw` motions are ports of Vim's own algorithms.
-- **`NotesVim`** (the app) installs a keyboard event tap that is only enabled while Notes is
-  frontmost, and ignores keys the window server sends to another process (Raycast, Spotlight
-  and other launchers take the keyboard without becoming the active app). In Insert mode only
-  `Esc` is intercepted. In Normal/Visual mode it reads the
-  focused `AXTextArea` through the Accessibility API, runs the engine, and writes back with
-  `AXSelectedTextRange` + `AXSelectedText`. Edits replace only the affected range, so the rest of
-  the note keeps its formatting.
-- Notes merges consecutive Accessibility edits into one undo step. After each change NotesVim
-  sends Notes an arrow key directly (`CGEvent.postToPid`) to end the undo group, waits until
-  Notes has processed it, and restores the cursor. One-character inserts and deletes also rewrite
-  a neighbouring character as itself, because Notes would otherwise still merge them.
+NotesVim has no network access and collects nothing. It reads keys only while they are going to
+Notes, and reads and edits the note you are working on through the macOS Accessibility API.
+That is why it needs the Accessibility permission, and it is all it uses it for.
 
-## Development
+## Uninstall
 
-```sh
-./scripts/test.sh           # engine unit tests
-./scripts/build-app.sh     # build/NotesVim.app
-./scripts/e2e.sh           # end-to-end test against the real Notes app (see below)
-```
+Choose **Uninstall NotesVim…** in its menu (switch to Notes to see the menu bar badge). It moves
+NotesVim to the Trash and removes its launcher, its Accessibility permission and its settings.
 
-`scripts/e2e.sh` drives Notes with real key presses and checks the result through Accessibility.
-It needs a note whose first line is `NotesVim scratch` to be open (it refuses to edit any other
-note), the terminal needs Accessibility and Screen Recording access (one test compares on-screen
-colours), and it takes over the keyboard and mouse for about a minute. Besides the key sequences
-it checks switching notes (it creates a second note, `NotesVim scratch 2`, once), a new note (it
-creates one and deletes it again), the block cursor overlay, and a launcher panel taking the
-keyboard. `./scripts/e2e.sh scenarios` runs only those.
-`NOTESVIM_DEBUG=1 NOTESVIM_LOG=/tmp/nv.log ./scripts/e2e.sh` traces every key.
+If you already deleted the app: remove **NotesVim** from **System Settings → General → Login Items
+& Extensions** and from **System Settings → Privacy & Security → Accessibility**.
+
+## Troubleshooting
+
+- **Keys do nothing in Notes.** Check that NotesVim is switched on in **System Settings → Privacy
+  & Security → Accessibility**. After installing a new version, switch it off and on again.
+- **NotesVim does not start with Notes.** Make sure it is in Applications, that **Start with
+  Notes** is checked in its menu, and that **NotesVim** is allowed in **System Settings → General →
+  Login Items & Extensions**.
+- **The welcome window again:** choose **Welcome Guide…** in the menu.
+
+## How it starts with Notes
+
+macOS cannot start one app along with another, so NotesVim registers a tiny login item, **NotesVim
+Launcher** (inside NotesVim.app). It does one thing: when Notes starts, it starts NotesVim. It has
+no permissions and uses about 3 MB of memory and no CPU. NotesVim itself quits as soon as Notes
+quits.
+
+## Contributing
+
+Bug reports, ideas and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for how
+to build, test and how it all works.
+
+## License
+
+Public domain ([The Unlicense](LICENSE)). Copy it, fork it, ship it, no strings attached.

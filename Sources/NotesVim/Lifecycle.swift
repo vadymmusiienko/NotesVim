@@ -29,7 +29,9 @@ final class Lifecycle {
     func start() {
         // Earlier versions of NotesVim could open themselves at login; the launcher replaces that.
         if SMAppService.mainApp.status == .enabled { try? SMAppService.mainApp.unregister() }
-        applyLauncherSetting()
+        // Registered from a download it would point at a temporary copy; the welcome window
+        // moves NotesVim into Applications first, and that copy registers it.
+        if AppLocation.isInApplications { applyLauncherSetting() }
         NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didTerminateApplicationNotification,
                                                           object: nil, queue: .main) { notification in
             let application = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
@@ -42,6 +44,21 @@ final class Lifecycle {
         SMAppService.openSystemSettingsLoginItems()
     }
 
+    /// Removes everything NotesVim added to the Mac: the launcher, the Accessibility permission,
+    /// its settings and the app itself (to the Trash). Notes are not touched.
+    func uninstall() {
+        try? launcher.unregister()
+        let reset = Process()
+        reset.executableURL = URL(fileURLWithPath: "/usr/bin/tccutil")
+        reset.arguments = ["reset", "Accessibility", Bundle.main.bundleIdentifier ?? "com.vadymmusiienko.NotesVim"]
+        try? reset.run()
+        reset.waitUntilExit()
+        if let domain = Bundle.main.bundleIdentifier { defaults.removePersistentDomain(forName: domain) }
+        NSWorkspace.shared.recycle([Bundle.main.bundleURL]) { _, _ in
+            DispatchQueue.main.async { NSApp.terminate(nil) }
+        }
+    }
+
     private static func quitIfNotesIsGone() {
         // Notes may already be starting again.
         guard NSRunningApplication.runningApplications(withBundleIdentifier: NotesApplication.bundleIdentifier).isEmpty else { return }
@@ -50,9 +67,15 @@ final class Lifecycle {
 
     private func applyLauncherSetting() {
         do {
+            // A launcher registered by a copy of NotesVim somewhere else would start that copy.
+            let registeredFrom = defaults.string(forKey: "launcherRegisteredFrom")
+            if startsWithNotes, launcher.status == .enabled, registeredFrom != Bundle.main.bundlePath {
+                try launcher.unregister()
+            }
             switch (startsWithNotes, launcher.status) {
             case (true, .notRegistered), (true, .notFound):
                 try launcher.register()
+                defaults.set(Bundle.main.bundlePath, forKey: "launcherRegisteredFrom")
             case (false, .enabled), (false, .requiresApproval):
                 try launcher.unregister()
             default:
